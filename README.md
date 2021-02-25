@@ -10,6 +10,7 @@ Let's start with defining what Policy-as-Code concept is.
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
+- 🧰 [Prerequisites](#prerequisites)
 - 🛡️ [What is Policy-as-Code?](#what-is-policy-as-code)
 - <img src="https://github.com/open-policy-agent/opa/blob/master/logo/logo.svg" height="16" width="16"/> [What is OPA Gatekeeper ?](#what-is-opa-gatekeeper-)
 - <img src="https://github.com/kyverno/artwork/blob/main/Kyverno.svg" height="16" width="16"/> [What is Kyverno ?](#what-is-kyverno-)
@@ -18,6 +19,11 @@ Let's start with defining what Policy-as-Code concept is.
 - 👀 [References](#references)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
+# Prerequisites
+
+* <img src="https://icons-for-free.com/download-icon-vscode+icons+type+minikube-1324451591901275074_0.svg" height="16" width="16"/> minikube v1.17.1
+* <img src="https://github.com/cncf/artwork/blob/master/other/illustrations/ashley-mcnamara/kubectl/kubectl.svg" height="16" width="16"/> kubectl v1.20.2
 
 # What is Policy-as-Code?
 Similar to the concept of `Infrastructure-as-Code (IaC)` and the benefits you get from codifying your infrastructure setup using the software development practices, `Policy-as-Code (PaC)` is the codification of your policies. 
@@ -66,6 +72,136 @@ Let's explain these differences with the table format.
 In my opinion, the best advantages of using Kyverno are no need to learn another policy language and the OpenAPI validation schema support that we can use via kubectl explain command. On the other hand side OPA Gatekeeper supports HA set up and also, there are lots of tools developed around the Rego language to help us to write and test our policies such as [conftest](https://github.com/instrumenta/conftest), [konstraint](https://github.com/plexsystems/konstraint) and this is a big plus in my opinion. These are the tools that we can use to implement `Policy-as-Code Pipeline`. Another advantage of using OPA Gatekeeper, therese are lots of libraries that includes ready to use policies written for us such as [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library), [konstraint-examples](https://github.com/plexsystems/konstraint/tree/main/examples) and [raspbernetes-policies](https://github.com/raspbernetes/k8s-security-policies/tree/master/policies).
 
 # Hands On
+I created two seperate folders for OPA Gatekeeper and Kyverno resources. We are going to start with the OPA Gatekepeer project first.
+
+There are various types of installation of OPA Gatekeeper but in this section we are going to use [plain YAML manifest](./opa-gatekeeper/deploy.yaml) to install it. Let's install OPA Gatekeeper using the YAML manifest. In order to do that, we need to start our local Kubernetes cluster using `minikube`, we are going to use two different [Minikube profiles](https://minikube.sigs.k8s.io/docs/commands/profile/) for the OPA Gatekeeper and the Kyverno, that will result with the creating two seperate Kubernetes cluster.
+```bash
+$ minikube start -p opa-gatekeeper
+😄  [opa-gatekeeper] minikube v1.17.1 on Darwin 10.15.7
+✨  Using the hyperkit driver based on user configuration
+👍  Starting control plane node opa-gatekeeper in cluster opa-gatekeeper
+🔥  Creating hyperkit VM (CPUs=3, Memory=8192MB, Disk=20000MB) ...
+🌐  Found network options:
+    ▪ no_proxy=127.0.0.1,localhost
+🐳  Preparing Kubernetes v1.20.2 on Docker 20.10.2 ...
+    ▪ env NO_PROXY=127.0.0.1,localhost
+    ▪ Generating certificates and keys ...
+    ▪ Booting up control plane ...
+    ▪ Configuring RBAC rules ...
+🔎  Verifying Kubernetes components...
+🌟  Enabled addons: storage-provisioner, default-storageclass
+🏄  Done! kubectl is now configured to use "opa-gatekeeper" cluster and "default" namespace by default
+```
+
+Let's apply the manifest.
+```bash
+$ kubectl apply -f opa-gatekeeper/deploy.yaml
+namespace/gatekeeper-system created
+Warning: apiextensions.k8s.io/v1beta1 CustomResourceDefinition is deprecated in v1.16+, unavailable in v1.22+; use apiextensions.k8s.io/v1 CustomResourceDefinition
+customresourcedefinition.apiextensions.k8s.io/configs.config.gatekeeper.sh created
+customresourcedefinition.apiextensions.k8s.io/constraintpodstatuses.status.gatekeeper.sh created
+customresourcedefinition.apiextensions.k8s.io/constrainttemplatepodstatuses.status.gatekeeper.sh created
+customresourcedefinition.apiextensions.k8s.io/constrainttemplates.templates.gatekeeper.sh created
+serviceaccount/gatekeeper-admin created
+podsecuritypolicy.policy/gatekeeper-admin created
+role.rbac.authorization.k8s.io/gatekeeper-manager-role created
+clusterrole.rbac.authorization.k8s.io/gatekeeper-manager-role created
+rolebinding.rbac.authorization.k8s.io/gatekeeper-manager-rolebinding created
+clusterrolebinding.rbac.authorization.k8s.io/gatekeeper-manager-rolebinding created
+secret/gatekeeper-webhook-server-cert created
+service/gatekeeper-webhook-service created
+deployment.apps/gatekeeper-audit created
+deployment.apps/gatekeeper-controller-manager created
+Warning: admissionregistration.k8s.io/v1beta1 ValidatingWebhookConfiguration is deprecated in v1.16+, unavailable in v1.22+; use admissionregistration.k8s.io/v1 ValidatingWebhookConfiguration
+validatingwebhookconfiguration.admissionregistration.k8s.io/gatekeeper-validating-webhook-configuration created
+```
+
+You should notice that bunch of CRDs created to allow define and enforce policies called `ConstraintTemplate` which describes both the Rego that enforces the constraint and the schema of the constraint.
+
+In this section, we are going to enforce policy to validate required labels that we want to on resources, if required label exits then we'll approve the request, if not we'll reject it.
+
+Let's look at the `ConstraintTemplate` that we are going to apply.
+```yaml
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            labels:
+              type: array
+              items: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }
+```
+
+You should notice that the policy that we define with the Rego language is placed under the `.targets[].rego` section. Once we applied this to the cluster, `K8sRequiredLabels` Custom Resource is going to be created and by using this CR we'll define our policy context, means which resources we want to apply the policy on.
+
+Let's apply it.
+```bash
+$ kubectl apply -f opa-gatekeeper/k8srequiredlabels-constraint-template.yaml
+constrainttemplate.templates.gatekeeper.sh/k8srequiredlabels created
+
+$ kubectl get customresourcedefinitions.apiextensions.k8s.io
+Found existing alias for "kubectl". You should use: "k"
+NAME                                                 CREATED AT
+configs.config.gatekeeper.sh                         2021-02-25T09:06:10Z
+constraintpodstatuses.status.gatekeeper.sh           2021-02-25T09:06:10Z
+constrainttemplatepodstatuses.status.gatekeeper.sh   2021-02-25T09:06:10Z
+constrainttemplates.templates.gatekeeper.sh          2021-02-25T09:06:10Z
+k8srequiredlabels.constraints.gatekeeper.sh          2021-02-25T09:19:39Z
+```
+
+As you can see, `K8sRequiredLabels` CR is created. Lets define and apply it too.
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: ns-must-have-gk
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    labels: ["gatekeeper"]
+```
+
+You should notice that we'll enforce the policy on `Namespace` resource and the label value that we want to be available on the Namespace is `gatekepeer`.
+```bash
+$ kubectl apply -f opa-gatekeeper/k8srequiredlabels-constraint.yaml
+k8srequiredlabels.constraints.gatekeeper.sh/ns-must-have-gk created
+```
+
+Let's test with creating invalid namespace then a valid one.
+```bash
+$ kubectl apply -f opa-gatekeeper/invalid-namespace.yaml
+Found existing alias for "kubectl apply -f". You should use: "kaf"
+Error from server ([denied by ns-must-have-gk] you must provide labels: {"gatekeeper"}): error when creating "opa-gatekeeper/invalid-namespace.yaml": admission webhook "validation.gatekeeper.sh" denied the request: [denied by ns-must-have-gk] you must provide labels: {"gatekeeper"}
+```
+
+```bash
+$ kubectl apply -f opa-gatekeeper/valid-namespace.yaml
+Found existing alias for "kubectl apply -f". You should use: "kaf"
+namespace/valid-namespace created
+```
 
 # References
 * https://medium.com/trendyol-tech/enforce-organizational-policies-and-security-best-practices-to-your-kubernetes-clusters-by-using-dfc085528e07
