@@ -1,0 +1,19 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: set-image-pull-policy
+spec:
+  rules:
+    - name: set-image-pull-policy
+      match:
+        resources:
+          kinds:
+          - Pod
+      mutate:
+        overlay:
+          spec:
+            containers:
+              # match images which end with :latest
+              - (image): "*:latest"
+                # set the imagePullPolicy to "IfNotPresent"
+                imagePullPolicy: "Always"

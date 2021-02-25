@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/name: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx:latest
+    name: nginx
+    imagePullPolicy: "IfNotPresent"
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}

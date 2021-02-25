@@ -22,7 +22,7 @@ Let's start with defining what Policy-as-Code concept is.
 
 # Prerequisites
 
-* <img src="https://icons-for-free.com/download-icon-vscode+icons+type+minikube-1324451591901275074_0.svg" height="16" width="16"/> minikube v1.17.1
+* <img src="./assets/minikube.svg" height="16" width="16"/> minikube v1.17.1
 * <img src="https://github.com/cncf/artwork/blob/master/other/illustrations/ashley-mcnamara/kubectl/kubectl.svg" height="16" width="16"/> kubectl v1.20.2
 
 # What is Policy-as-Code?
@@ -202,6 +202,170 @@ $ kubectl apply -f opa-gatekeeper/valid-namespace.yaml
 Found existing alias for "kubectl apply -f". You should use: "kaf"
 namespace/valid-namespace created
 ```
+
+Tadaaaa, it worked 🎉🎉🎉🎉
+
+Let's move on with the Kyverno, again, there are various way to install it unto the Kubernetes, in this case, we are going to use Helm. We said that we'll start up another Minikub cluster with different profile.
+Let's start with it.
+```bash
+$ minikube start -p kyverno
+😄  [kyverno] minikube v1.17.1 on Darwin 10.15.7
+✨  Using the hyperkit driver based on user configuration
+👍  Starting control plane node kyverno in cluster kyverno
+🔥  Creating hyperkit VM (CPUs=3, Memory=8192MB, Disk=20000MB) ...
+🌐  Found network options:
+    ▪ no_proxy=127.0.0.1,localhost
+🐳  Preparing Kubernetes v1.20.2 on Docker 20.10.2 ...
+    ▪ env NO_PROXY=127.0.0.1,localhost
+    ▪ Generating certificates and keys ...
+    ▪ Booting up control plane ...
+    ▪ Configuring RBAC rules ...
+🔎  Verifying Kubernetes components...
+🌟  Enabled addons: storage-provisioner, default-storageclass
+🏄  Done! kubectl is now configured to use "kyverno" cluster and "default" namespace by default
+
+$ minikube profile list
+|----------------|-----------|---------|---------------|------|---------|---------|-------|
+|    Profile     | VM Driver | Runtime |      IP       | Port | Version | Status  | Nodes |
+|----------------|-----------|---------|---------------|------|---------|---------|-------|
+| kyverno        | hyperkit  | docker  | 192.168.64.17 | 8443 | v1.20.2 | Running |     1 |
+| minikube       | hyperkit  | docker  | 192.168.64.15 | 8443 | v1.20.2 | Stopped |     1 |
+| opa-gatekeeper | hyperkit  | docker  | 192.168.64.16 | 8443 | v1.20.2 | Running |     1 |
+|----------------|-----------|---------|---------------|------|---------|---------|-------|
+```
+
+Let's install it by using Helm.
+```bash
+$ helm repo add kyverno https://kyverno.github.io/kyverno/
+"kyverno" has been added to your repositories
+
+$ helm repo update
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "kyverno" chart repository
+...Successfully got an update from the "nats" chart repository
+...Successfully got an update from the "falcosecurity" chart repository
+...Successfully got an update from the "openfaas" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
+
+$ helm install kyverno --namespace kyverno kyverno/kyverno --create-namespace
+NAME: kyverno
+LAST DEPLOYED: Thu Feb 25 13:16:21 2021
+NAMESPACE: kyverno
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+Thank you for installing kyverno 😀
+
+Your release is named kyverno.
+
+We have installed the "default" profile of Pod Security Standards and set them in audit mode.
+
+Visit https://kyverno.io/policies/ to find more sample policies.
+```
+
+Let's look at the Custom Resource Definitions list.
+```bash
+$ kubectl get customresourcedefinitions.apiextensions.k8s.io
+Found existing alias for "kubectl". You should use: "k"
+NAME                                     CREATED AT
+clusterpolicies.kyverno.io               2021-02-25T10:16:16Z
+clusterpolicyreports.wgpolicyk8s.io      2021-02-25T10:16:16Z
+clusterreportchangerequests.kyverno.io   2021-02-25T10:16:16Z
+generaterequests.kyverno.io              2021-02-25T10:16:16Z
+policies.kyverno.io                      2021-02-25T10:16:16Z
+policyreports.wgpolicyk8s.io             2021-02-25T10:16:16Z
+reportchangerequests.kyverno.io          2021-02-25T10:16:16Z
+```
+
+We can also use `kubectl explain` command to get information easily about the resource using the OpenAPI schema.
+```bash
+$ kubectl explain policies
+KIND:     Policy
+VERSION:  kyverno.io/v1
+
+DESCRIPTION:
+     Policy declares validation, mutation, and generation behaviors for matching
+     resources. See: https://kyverno.io/docs/writing-policies/ for more
+     information.
+
+FIELDS:
+   apiVersion	<string>
+     APIVersion defines the versioned schema of this representation of an
+     object. Servers should convert recognized schemas to the latest internal
+     value, and may reject unrecognized values. More info:
+     https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+
+   kind	<string>
+     Kind is a string value representing the REST resource this object
+     represents. Servers may infer this from the endpoint the client submits
+     requests to. Cannot be updated. In CamelCase. More info:
+     https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+
+   metadata	<Object>
+     Standard object's metadata. More info:
+     https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+
+   spec	<Object> -required-
+     Spec defines policy behaviors and contains one or rules.
+
+   status	<Object>
+     Status contains policy runtime information.
+```
+
+Lets look at our first policy definition. In this case we are using validating feature of Kyverno.
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-labels
+spec:
+  validationFailureAction: enforce
+  rules:
+  - name: check-for-labels
+    match:
+      resources:
+        kinds:
+        - Pod
+    validate:
+      message: "label `app.kubernetes.io/name` is required"
+      pattern:
+        metadata:
+          labels:
+            app.kubernetes.io/name: "?*"
+```
+You should notice that we enforcing a required label policy on Pod resource. We are ddefining policies using native Kyverno Custom Resource called `ClusterPolicy`.
+
+Let's apply it.
+```bash
+$ kubectl apply -f kyverno/validating/requirelabels-clusterpolicy.yaml
+clusterpolicy.kyverno.io/require-labels created
+```
+
+Let's test it by creating a Deployment that violates the policy.
+```bash
+$ kubectl apply -f kyverno/validating/invalid-deployment.yaml
+Found existing alias for "kubectl apply -f". You should use: "kaf"
+Error from server: error when creating "kyverno/validating/invalid-deployment.yaml": admission webhook "validate.kyverno.svc" denied the request:
+
+resource Deployment/default/nginx was blocked due to the following policies
+
+require-labels:
+  autogen-check-for-labels: 'validation error: label `app.kubernetes.io/name` is required. Rule autogen-check-for-labels failed at path /spec/template/metadata/labels/app.kubernetes.io/name/'
+```
+
+Let's apply valid one.
+```bash
+$ kubectl apply -f kyverno/validating/valid-deployment.yaml
+pod/nginx created
+
+$ kubectl get pods
+NAME    READY   STATUS              RESTARTS   AGE
+nginx   0/1     ContainerCreating   0          6s
+```
+
+Tadaaaa, it worked 🎉🎉🎉🎉
 
 # References
 * https://medium.com/trendyol-tech/enforce-organizational-policies-and-security-best-practices-to-your-kubernetes-clusters-by-using-dfc085528e07
