@@ -57,9 +57,9 @@ Let's explain these differences with the table format.
 | Mutation                                    	|     ✓*     	|    ✓    	|
 | Generation                                  	|      X     	|    ✓    	|
 | Policy as native resources                  	|      ✓     	|    ✓    	|
-| Metrics exposed                             	|      ✓     	|    X    	|
+| Metrics exposed                             	|      ✓     	|    ✓    	|
 | OpenAPI validation schema (kubectl explain) 	|      X     	|    ✓    	|
-| High Availability                           	|      ✓     	|    X    	|
+| High Availability                           	|      ✓     	|    ✓    	|
 | API object lookup                           	|      ✓     	|    ✓*   	|
 | CLI with test ability                       	|     ✓**    	|    ✓    	|
 | Policy audit ability                        	|      ✓     	|    ✓    	|
@@ -69,7 +69,7 @@ Let's explain these differences with the table format.
 
 > Credit: https://neonmirrors.net/post/2021-02/kubernetes-policy-comparison-opa-gatekeeper-vs-kyverno/
 
-In my opinion, the best advantages of using Kyverno are no need to learn another policy language and the OpenAPI validation schema support that we can use via kubectl explain command. On the other hand side OPA Gatekeeper supports HA set up and also, there are lots of tools developed around the Rego language to help us to write and test our policies such as [conftest](https://github.com/instrumenta/conftest), [konstraint](https://github.com/plexsystems/konstraint) and this is a big plus in my opinion. These are the tools that we can use to implement `Policy-as-Code Pipeline`. Another advantage of using OPA Gatekeeper, therese are lots of libraries that includes ready to use policies written for us such as [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library), [konstraint-examples](https://github.com/plexsystems/konstraint/tree/main/examples) and [raspbernetes-policies](https://github.com/raspbernetes/k8s-security-policies/tree/master/policies).
+In my opinion, the best advantages of using Kyverno are no need to learn another policy language and the OpenAPI validation schema support that we can use via kubectl explain command. On the other hand side, OPA Gatekeeper has lots of tools developed around the Rego language to help us to write and test our policies such as [conftest](https://github.com/instrumenta/conftest), [konstraint](https://github.com/plexsystems/konstraint) and this is a big plus in my opinion. These are the tools that we can use to implement `Policy-as-Code Pipeline`. Another advantage of using OPA Gatekeeper, therese are lots of libraries that includes ready to use policies written for us such as [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library), [konstraint-examples](https://github.com/plexsystems/konstraint/tree/main/examples) and [raspbernetes-policies](https://github.com/raspbernetes/k8s-security-policies/tree/master/policies).
 
 # Hands On
 I created two seperate folders for OPA Gatekeeper and Kyverno resources. We are going to start with the OPA Gatekepeer project first.
